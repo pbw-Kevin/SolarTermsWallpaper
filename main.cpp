@@ -34,7 +34,7 @@ AI declaration: using DeepSeek & GitHub Copilot in this project
 
 #pragma comment(lib, "shlwapi.lib")
 
-const std::string version = "v0.1.0";
+const std::string version = "v0.2.0";
 
 namespace Utils {
     std::string getCombinedPath(std::string a, std::string b);
