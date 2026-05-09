@@ -9,7 +9,8 @@
 				"/Zi",
 				"/EHsc",
 				"/O2",
-				"/utf-8",
+				"/source-charset:utf-8",
+				"/execution-charset:gb2312",
 				"/nologo",
 				"/Fe${fileDirname}\\build\\${fileBasenameNoExtension}.exe",
 				"${file}"

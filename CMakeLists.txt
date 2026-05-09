@@ -10,5 +10,15 @@ add_compile_options(/execution-charset:gb2312)
 add_compile_options(/MT)
 aux_source_directory(. CPP_LIST)
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build")
+if(MSVC)
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        add_compile_options(/O2)
+    elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        add_compile_options(/RTC1)
+    endif()
+endif()
+
+include_directories(${CMAKE_SOURCE_DIR}/include/stb)
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/build)
 add_executable(SolarTermsWallpaper main.cpp favicon.rc)
