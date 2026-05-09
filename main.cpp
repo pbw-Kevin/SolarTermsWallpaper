@@ -7,17 +7,30 @@ AI declaration: using DeepSeek & GitHub Copilot in this project
 // #define SOLAR_TERMS_WALLPAPER_DEBUG 1
 
 #include <string>
+#include <vector>
 #include <cstdlib>
 #include <ctime>
 #include <cstdio>
 #include <thread>
 #include <atomic>
 #include <chrono>
+#include <algorithm>
+#include <codecvt>
+#include <locale>
 #include <windows.h>
 #include <shellapi.h>
 #include <tlhelp32.h>
 #include <direct.h>
 #include <shlwapi.h>
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+
+#define STB_TRUETYPE_IMPLEMENTATION
+#include "stb_truetype.h"
 
 #pragma comment(lib, "shlwapi.lib")
 
@@ -28,6 +41,7 @@ namespace Utils {
     std::string getExePath(char* argv0);
     bool hasOtherProcessWithSameName(char* argv0);
     bool atLeastWindows10();
+    size_t deleteFilesStartingWithProcessed(const std::string& folderPath);
     void msgBoxShowMessage(std::string message);
     void Exit(int code);
 
@@ -88,6 +102,40 @@ namespace Utils {
         }
 
         return false;
+    }
+
+    size_t deleteFilesStartingWithProcessed(const std::string& folderPath) {
+        size_t deletedCount = 0;
+
+        std::string searchPattern = folderPath + "\\processed*";
+
+        WIN32_FIND_DATAA findData;
+        HANDLE hFind = FindFirstFileA(searchPattern.c_str(), &findData);
+        if (hFind == INVALID_HANDLE_VALUE) {
+            DWORD err = GetLastError();
+            if (err == ERROR_FILE_NOT_FOUND) {
+                return 0;
+            } else {
+                // Error
+            }
+            return 0;
+        }
+
+        do {
+            // 排除目录
+            if (!(findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+                std::string fullPath = folderPath + "\\" + findData.cFileName;
+                if (DeleteFileA(fullPath.c_str())) {
+                    ++deletedCount;
+                } else {
+                    DWORD err = GetLastError();
+                    // Error
+                }
+            }
+        } while (FindNextFileA(hFind, &findData) != 0);
+
+        FindClose(hFind);
+        return deletedCount;
     }
 
     void msgBoxShowMessage(std::string message) {
@@ -253,14 +301,17 @@ class Logger {
 
 struct WallpaperConfig {
     std::string imageName;
-    int textPosX;
-    int textPosY;
+    int fontSize;
+    int left, top;
+    int r, g, b;
+    int alpha;
+    bool isBold;
 };
 
 class Wallpaper{
     public:
         Wallpaper(std::string cwd, Logger* logger);
-        void setWallpaper(int idx);
+        void setWallpaper(int idx, std::string parentCwd, std::string dateString, std::string rawDateString);
         void fallbackWallpaper();
         std::string wallpaperVersion;
     private:
@@ -422,7 +473,7 @@ namespace TrayIcon {
 
     void ShowAboutDialog(HWND hwnd)
     {
-        std::string message = "二十四节气壁纸\n版本：" + version + "\n图片库版本：" + wallpaper->wallpaperVersion;
+        std::string message = "二十四节气壁纸\n版本：" + version + "\n图片库版本：" + wallpaper->wallpaperVersion + "\n基于 MIT 协议在 GitHub 上开源：\nhttps://github.com/pbw-Kevin/SolarTermsWallpaper";
         MessageBoxA(hwnd, message.c_str(), "关于", MB_OK | MB_ICONINFORMATION);
     }
 
@@ -460,6 +511,257 @@ namespace TrayIcon {
         return 0;
     }
 } // namespace TrayIcon
+
+namespace ImageProcess {
+
+    struct Image {
+        std::vector<unsigned char> data;   // RGBA
+        int width;
+        int height;
+    };
+
+    static std::wstring GB2312ToWide(const std::string& str) {
+        if (str.empty()) return L"";
+        int len = MultiByteToWideChar(936, 0, str.c_str(), (int)str.size(), nullptr, 0);
+        if (len == 0) return L"";
+        std::wstring result(len, L'\0');
+        MultiByteToWideChar(936, 0, str.c_str(), (int)str.size(), &result[0], len);
+        return result;
+    }
+
+    inline Image loadImage(const std::string& filename) {
+        Image img;
+        int channels;
+        unsigned char* raw = stbi_load(filename.c_str(), &img.width, &img.height, &channels, 4);
+        if (!raw) {
+            if (logger) logger->log(Logger::Error, "Failed to load image: %s", filename.c_str());
+            img.width = img.height = 0;
+        } else {
+            img.data.assign(raw, raw + img.width * img.height * 4);
+            stbi_image_free(raw);
+        }
+        return img;
+    }
+
+    inline bool saveImage(const Image& img, const std::string& filename) {
+        if (img.data.empty() || img.width <= 0 || img.height <= 0) {
+            if (logger) logger->log(Logger::Error, "Invalid image data");
+            return false;
+        }
+        std::string ext = filename.substr(filename.find_last_of('.') + 1);
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+        int ret = 0;
+        if (ext == "png") {
+            ret = stbi_write_png(filename.c_str(), img.width, img.height, 4, img.data.data(), img.width * 4);
+        } else if (ext == "jpg" || ext == "jpeg") {
+            ret = stbi_write_jpg(filename.c_str(), img.width, img.height, 4, img.data.data(), 90);
+        } else if (ext == "bmp") {
+            ret = stbi_write_bmp(filename.c_str(), img.width, img.height, 4, img.data.data());
+        } else if (ext == "tga") {
+            ret = stbi_write_tga(filename.c_str(), img.width, img.height, 4, img.data.data());
+        } else {
+            if (logger) logger->log(Logger::Error, "Unsupported format: %s", ext.c_str());
+            return false;
+        }
+        if (ret == 0) {
+            if (logger) logger->log(Logger::Error, "Failed to save image: %s", filename.c_str());
+            return false;
+        }
+        return true;
+    }
+
+    inline bool drawTextOnImage(Image& img,
+                                const std::string& text,
+                                const std::string& fontPath,
+                                int fontSize,
+                                int left, int top,
+                                int r, int g, int b,
+                                int alpha = 255) {
+        if (img.data.empty() || text.empty() || fontPath.empty() || fontSize <= 0) {
+            if (logger) logger->log(Logger::Error, "drawTextOnImage: invalid parameters");
+            return false;
+        }
+
+        std::wstring wtext = GB2312ToWide(text);
+        if (wtext.empty() && !text.empty()) {
+            if (logger) logger->log(Logger::Error, "drawTextOnImage: text conversion failed");
+            return false;
+        }
+
+        FILE* fontFile = fopen(fontPath.c_str(), "rb");
+        if (!fontFile) {
+            if (logger) logger->log(Logger::Error, "drawTextOnImage: cannot open font %s", fontPath.c_str());
+            return false;
+        }
+        fseek(fontFile, 0, SEEK_END);
+        long fsize = ftell(fontFile);
+        fseek(fontFile, 0, SEEK_SET);
+        std::vector<unsigned char> fontBuffer(fsize);
+        if (fread(fontBuffer.data(), 1, fsize, fontFile) != (size_t)fsize) {
+            if (logger) logger->log(Logger::Error, "drawTextOnImage: read font error");
+            fclose(fontFile);
+            return false;
+        }
+        fclose(fontFile);
+
+        stbtt_fontinfo fontInfo;
+        if (!stbtt_InitFont(&fontInfo, fontBuffer.data(), 0)) {
+            if (logger) logger->log(Logger::Error, "drawTextOnImage: font init failed");
+            return false;
+        }
+
+        float scale = stbtt_ScaleForPixelHeight(&fontInfo, (float)fontSize);
+
+        int bbox_xmin = 0, bbox_ymin = 0, bbox_xmax = 0, bbox_ymax = 0;
+        int cursorX = 0;
+        for (size_t i = 0; i < wtext.size(); ++i) {
+            int advance, lsb;
+            stbtt_GetCodepointHMetrics(&fontInfo, wtext[i], &advance, &lsb);
+            int x0, y0, x1, y1;
+            stbtt_GetCodepointBitmapBox(&fontInfo, wtext[i], scale, scale, &x0, &y0, &x1, &y1);
+            int char_left   = cursorX + x0;
+            int char_right  = cursorX + x1;
+            int char_top    = y0;
+            int char_bottom = y1;
+            if (i == 0) {
+                bbox_xmin = char_left;
+                bbox_xmax = char_right;
+                bbox_ymin = char_top;
+                bbox_ymax = char_bottom;
+            } else {
+                bbox_xmin = (std::min)(bbox_xmin, char_left);
+                bbox_xmax = (std::max)(bbox_xmax, char_right);
+                bbox_ymin = (std::min)(bbox_ymin, char_top);
+                bbox_ymax = (std::max)(bbox_ymax, char_bottom);
+            }
+            cursorX += (int)(advance * scale);
+        }
+
+        int offsetX = left - bbox_xmin;
+        int offsetY = top - bbox_ymin;
+
+        cursorX = 0;
+        for (size_t i = 0; i < wtext.size(); ++i) {
+            int advance, lsb;
+            stbtt_GetCodepointHMetrics(&fontInfo, wtext[i], &advance, &lsb);
+            int x0, y0, x1, y1;
+            stbtt_GetCodepointBitmapBox(&fontInfo, wtext[i], scale, scale, &x0, &y0, &x1, &y1);
+            int glyph_w = x1 - x0;
+            int glyph_h = y1 - y0;
+            if (glyph_w <= 0 || glyph_h <= 0) {
+                cursorX += (int)(advance * scale);
+                continue;
+            }
+
+            std::vector<unsigned char> bitmap(glyph_w * glyph_h, 0);
+            stbtt_MakeCodepointBitmap(&fontInfo, bitmap.data(),
+                                      glyph_w, glyph_h, glyph_w,
+                                      scale, scale, wtext[i]);
+
+            int destX = cursorX + x0 + offsetX;
+            int destY = y0 + offsetY;
+
+            for (int py = 0; py < glyph_h; ++py) {
+                for (int px = 0; px < glyph_w; ++px) {
+                    int imgX = destX + px;
+                    int imgY = destY + py;
+                    if (imgX >= 0 && imgX < img.width && imgY >= 0 && imgY < img.height) {
+                        unsigned char mask = bitmap[py * glyph_w + px];
+                        if (mask == 0) continue;
+                        float srcAlpha = (mask / 255.0f) * (alpha / 255.0f);
+                        float dstAlpha = 1.0f - srcAlpha;
+                        int idx = (imgY * img.width + imgX) * 4;
+                        img.data[idx + 0] = (unsigned char)(img.data[idx + 0] * dstAlpha + r * srcAlpha);
+                        img.data[idx + 1] = (unsigned char)(img.data[idx + 1] * dstAlpha + g * srcAlpha);
+                        img.data[idx + 2] = (unsigned char)(img.data[idx + 2] * dstAlpha + b * srcAlpha);
+                        img.data[idx + 3] = (unsigned char)(img.data[idx + 3] * dstAlpha + alpha * srcAlpha);
+                    }
+                }
+            }
+            cursorX += (int)(advance * scale);
+        }
+        return true;
+    }
+
+    inline Image createTextImage(const std::string& text,
+                                 const std::string& fontPath,
+                                 int fontSize,
+                                 int r, int g, int b,
+                                 int alpha = 255,
+                                 int extraLeft = 0, int extraTop = 0,
+                                 int extraRight = 0, int extraBottom = 0) {
+        Image result;
+        if (text.empty() || fontPath.empty()) {
+            if (logger) logger->log(Logger::Error, "createTextImage: empty text or font");
+            return result;
+        }
+
+        std::wstring wtext = GB2312ToWide(text);
+        FILE* fontFile = fopen(fontPath.c_str(), "rb");
+        if (!fontFile) {
+            if (logger) logger->log(Logger::Error, "createTextImage: cannot open font %s", fontPath.c_str());
+            return result;
+        }
+        fseek(fontFile, 0, SEEK_END);
+        long fsize = ftell(fontFile);
+        fseek(fontFile, 0, SEEK_SET);
+        std::vector<unsigned char> fontBuffer(fsize);
+        fread(fontBuffer.data(), 1, fsize, fontFile);
+        fclose(fontFile);
+
+        stbtt_fontinfo fontInfo;
+        if (!stbtt_InitFont(&fontInfo, fontBuffer.data(), 0)) {
+            if (logger) logger->log(Logger::Error, "createTextImage: font init failed");
+            return result;
+        }
+
+        float scale = stbtt_ScaleForPixelHeight(&fontInfo, (float)fontSize);
+        int bbox_xmin = 0, bbox_ymin = 0, bbox_xmax = 0, bbox_ymax = 0;
+        int cursorX = 0;
+        for (size_t i = 0; i < wtext.size(); ++i) {
+            int advance, lsb;
+            stbtt_GetCodepointHMetrics(&fontInfo, wtext[i], &advance, &lsb);
+            int x0, y0, x1, y1;
+            stbtt_GetCodepointBitmapBox(&fontInfo, wtext[i], scale, scale, &x0, &y0, &x1, &y1);
+            int char_left   = cursorX + x0;
+            int char_right  = cursorX + x1;
+            int char_top    = y0;
+            int char_bottom = y1;
+            if (i == 0) {
+                bbox_xmin = char_left;
+                bbox_xmax = char_right;
+                bbox_ymin = char_top;
+                bbox_ymax = char_bottom;
+            } else {
+                bbox_xmin = (std::min)(bbox_xmin, char_left);
+                bbox_xmax = (std::max)(bbox_xmax, char_right);
+                bbox_ymin = (std::min)(bbox_ymin, char_top);
+                bbox_ymax = (std::max)(bbox_ymax, char_bottom);
+            }
+            cursorX += (int)(advance * scale);
+        }
+
+        int width  = (bbox_xmax - bbox_xmin) + extraLeft + extraRight;
+        int height = (bbox_ymax - bbox_ymin) + extraTop + extraBottom;
+        if (width <= 0 || height <= 0) {
+            if (logger) logger->log(Logger::Error, "createTextImage: invalid dimensions");
+            return result;
+        }
+
+        result.width = width;
+        result.height = height;
+        result.data.assign(width * height * 4, 0);
+
+        int textLeft = extraLeft - bbox_xmin;
+        int textTop  = extraTop - bbox_ymin;
+        if (!drawTextOnImage(result, text, fontPath, fontSize, textLeft, textTop, r, g, b, alpha)) {
+            if (logger) logger->log(Logger::Error, "createTextImage: drawing failed");
+            return Image{};
+        }
+        return result;
+    }
+
+} // namespace ImageProcess
 
 Logger::Logger(FILE* fp, int level) : fp(fp) {
     if(level >= Debug && level <= None) this->curLevel = level;
@@ -513,8 +815,9 @@ Wallpaper::Wallpaper(std::string cwd, Logger* logger) : cwd(cwd), logger(logger)
     wallpaperVersion = wallpaperVersionBuf;
     for (int i = 0; i < 24; i++) {
         char imageName[MAX_PATH];
-        // fscanf(confFile, "%259s %d %d\n", imageName, &conf[i].textPosX, &conf[i].textPosY);
-        fscanf(confFile, "%259s\n", imageName);
+        int isBold;
+        fscanf(confFile, "%259s %d %d %d %d %d %d %d %d\n", imageName, &conf[i].fontSize, &conf[i].left, &conf[i].top, &conf[i].r, &conf[i].g, &conf[i].b, &conf[i].alpha, &isBold);
+        conf[i].isBold = isBold;
         conf[i].imageName = imageName;
     }
     logger->log(Logger::Info, "Wallpaper initialized.");
@@ -551,12 +854,8 @@ std::string Wallpaper::getSystemWallpaper() {
 }
 
 bool Wallpaper::setSystemWallpaper(std::string path) {
-    // int wideSize = MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, nullptr, 0);
-    // std::wstring widePath(wideSize, L'\0');
-    // MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, &widePath[0], wideSize);
     char pathBuf[MAX_PATH] = {};
     strcpy(pathBuf, path.c_str());
-    // if (!SystemParametersInfo(SPI_SETDESKWALLPAPER, 0, (PVOID)widePath.c_str(), SPIF_UPDATEINIFILE | SPIF_SENDWININICHANGE)) {
     if (!SystemParametersInfo(SPI_SETDESKWALLPAPER, 0, pathBuf, SPIF_UPDATEINIFILE | SPIF_SENDWININICHANGE)) {
         DWORD errorCode = GetLastError();
         logger->log(Logger::Error, "Failed to set system wallpaper: %s", path.c_str());
@@ -566,11 +865,13 @@ bool Wallpaper::setSystemWallpaper(std::string path) {
     return false;
 }
 
-void Wallpaper::setWallpaper(int idx) {
+void Wallpaper::setWallpaper(int idx, std::string parentCwd, std::string dateString, std::string rawDateString) {
+    std::string processedImagePath = Utils::getCombinedPath(cwd, "processed_" + rawDateString + ".png");
+
     // If the same wallpaper is already active
     if (activeIdx == idx) {
         std::string currentWallpaper = getSystemWallpaper();
-        if (currentWallpaper.empty() || currentWallpaper != Utils::getCombinedPath(cwd, conf[idx].imageName)) {
+        if (currentWallpaper.empty() || currentWallpaper != processedImagePath) {
             logger->log(Logger::Warning, "Active wallpaper is missing or changed, resetting wallpaper.");
             setFallbackPath(currentWallpaper);
         } else {
@@ -591,7 +892,29 @@ void Wallpaper::setWallpaper(int idx) {
         logger->log(Logger::Error, "Wallpaper image not found: %s", imagePath);
         return;
     }
-    if (setSystemWallpaper(imagePath)) return;
+
+    ImageProcess::Image img = ImageProcess::loadImage(imagePath);
+
+    if (img.data.empty()) {
+        logger->log(Logger::Error, "Failed to load wallpaper image: %s", imagePath);
+        return;
+    }
+
+    if (!conf[idx].imageName.empty()) {
+        if (!ImageProcess::drawTextOnImage(img, dateString, Utils::getCombinedPath(parentCwd, conf[idx].isBold ? "assets\\bold.otf" : "assets\\regular.otf"), conf[idx].fontSize, conf[idx].left, conf[idx].top, conf[idx].r, conf[idx].g, conf[idx].b, conf[idx].alpha)) {
+            logger->log(Logger::Error, "Failed to draw text on wallpaper image: %s", imagePath);
+            return;
+        }
+    }
+
+    Utils::deleteFilesStartingWithProcessed(cwd);
+
+    if (!ImageProcess::saveImage(img, processedImagePath)) {
+        logger->log(Logger::Error, "Failed to save processed wallpaper image: %s", processedImagePath);
+        return;
+    }
+
+    if (setSystemWallpaper(processedImagePath)) return;
 
     // Update idx
     activeIdx = idx;
@@ -649,7 +972,7 @@ int main(int argc, char* argv[]) {
         GetLocalTime(&st);
         int solarTermIdx = SolarTerms::getSolarTerm(st.wYear, st.wMonth, st.wDay);
         logger->log(Logger::Info, "Current date: %04d-%02d-%02d, Solar Term: %s", st.wYear, st.wMonth, st.wDay, SolarTerms::SolarTermsNames[solarTermIdx].c_str());
-        if (solarTermIdx < 24) wallpaper->setWallpaper(solarTermIdx);
+        if (solarTermIdx < 24) wallpaper->setWallpaper(solarTermIdx, cwd, std::to_string(st.wYear) + " 年 " + std::to_string(st.wMonth) + " 月 " + std::to_string(st.wDay) + " 日", std::to_string(st.wYear) + "_" + std::to_string(st.wMonth) + "_" + std::to_string(st.wDay));
         else wallpaper->fallbackWallpaper();
         Sleep(10000);
     }

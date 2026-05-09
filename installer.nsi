@@ -123,7 +123,7 @@ Section "Install"
 
     WriteUninstaller "$INSTDIR\uninstall.exe"
 
-    File "build\Debug\SolarTermsWallpaper.exe"
+    File "build\Release\SolarTermsWallpaper.exe"
     File "kill.bat"
 
     SetOutPath "$INSTDIR\wallpapers"

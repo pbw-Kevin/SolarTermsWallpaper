@@ -23,6 +23,7 @@ SolarTermsWallpaper.dir/*
 *.vcxproj
 *.vcxproj.filters
 *.sln
+*.obj
 *.exe
 x64/*
 
