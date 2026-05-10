@@ -135,10 +135,10 @@ Section "Install"
     SetOutPath "$INSTDIR"
 
     CreateDirectory "$SMPROGRAMS\${PRODUCT_SHORT_NAME}"
-    CreateShortCut "$SMPROGRAMS\${PRODUCT_SHORT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\${PRODUCT_SHORT_NAME}.exe"
-    CreateShortCut "$SMPROGRAMS\${PRODUCT_SHORT_NAME}\п╤ть ${PRODUCT_NAME}.lnk" "$INSTDIR\uninstall.exe"
+    CreateShortCut "$SMPROGRAMS\${PRODUCT_SHORT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\${PRODUCT_SHORT_NAME}.exe" "" "" "" SW_SHOWMINIMIZED
+    CreateShortCut "$SMPROGRAMS\${PRODUCT_SHORT_NAME}\п╤ть ${PRODUCT_NAME}.lnk" "$INSTDIR\uninstall.exe" 
 
-    CreateShortCut "$DESKTOP\${PRODUCT_NAME}.lnk" "$INSTDIR\${PRODUCT_SHORT_NAME}.exe"
+    CreateShortCut "$DESKTOP\${PRODUCT_NAME}.lnk" "$INSTDIR\${PRODUCT_SHORT_NAME}.exe" "" "" "" SW_SHOWMINIMIZED
 
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_SHORT_NAME}" \
                  "DisplayName" "${PRODUCT_NAME} ${PRODUCT_VERSION}"
