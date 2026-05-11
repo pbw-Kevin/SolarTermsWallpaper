@@ -34,6 +34,7 @@ AI declaration: using DeepSeek & GitHub Copilot in this project
 
 #pragma comment(lib, "shlwapi.lib")
 
+const std::string appName = "二十四节气壁纸";
 const std::string version = "v0.2.0";
 
 namespace Utils {
@@ -139,7 +140,7 @@ namespace Utils {
     }
 
     void msgBoxShowMessage(std::string message) {
-        MessageBoxA(NULL, message.c_str(), "二十四节气壁纸", MB_OK | MB_ICONINFORMATION);
+        MessageBoxA(NULL, message.c_str(), appName.c_str(), MB_OK | MB_ICONINFORMATION);
     }
 
     void Exit(int code) {
@@ -444,7 +445,7 @@ namespace TrayIcon {
             hIcon = LoadIconA(nullptr, IDI_APPLICATION);
         nid.hIcon = hIcon;
 
-        strcpy_s(nid.szTip, "二十四节气壁纸");
+        strcpy_s(nid.szTip, appName.c_str());
         return Shell_NotifyIconA(NIM_ADD, &nid) != FALSE;
     }
 
@@ -473,7 +474,7 @@ namespace TrayIcon {
 
     void ShowAboutDialog(HWND hwnd)
     {
-        std::string message = "二十四节气壁纸\n版本：" + version + "\n图片库版本：" + wallpaper->wallpaperVersion + "\n基于 MIT 协议在 GitHub 上开源：\nhttps://github.com/pbw-Kevin/SolarTermsWallpaper";
+        std::string message = appName + "\n版本：" + version + "\n图片库版本：" + wallpaper->wallpaperVersion + "\n基于 MIT 协议在 GitHub 上开源：\nhttps://github.com/pbw-Kevin/SolarTermsWallpaper";
         MessageBoxA(hwnd, message.c_str(), "关于", MB_OK | MB_ICONINFORMATION);
     }
 
@@ -941,11 +942,11 @@ int main(int argc, char* argv[]) {
     ShowWindow(hWnd, SW_HIDE);
 
     if (Utils::hasOtherProcessWithSameName(argv[0])) {
-        Utils::msgBoxShowMessage("二十四节气壁纸已经在运行了，无需重复启动。");
+        Utils::msgBoxShowMessage(appName + std::string("已经在运行了，无需重复启动。"));
         Utils::Exit(0);
     }
     if (!Utils::atLeastWindows10()) {
-        Utils::msgBoxShowMessage("二十四节气壁纸需要在 Windows 10 或更高版本上运行。\n即将退出程序。");
+        Utils::msgBoxShowMessage(appName + std::string("需要在 Windows 10 或更高版本上运行。\n即将退出程序。"));
         Utils::Exit(1);
     }
 
