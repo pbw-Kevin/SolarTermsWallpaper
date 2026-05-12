@@ -951,8 +951,7 @@ void Wallpaper::fallbackWallpaper() {
 }
 
 int main(int argc, char* argv[]) {
-    HWND hWnd = GetConsoleWindow();
-    ShowWindow(hWnd, SW_HIDE);
+    FreeConsole();
 
     if (Utils::hasOtherProcessWithSameName(argv[0])) {
         Utils::msgBoxShowMessage(appName + std::string("已经在运行了，无需重复启动。"));
