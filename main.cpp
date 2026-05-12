@@ -37,7 +37,7 @@ AI declaration: using DeepSeek & GitHub Copilot in this project
 
 const std::string appName = "二十四节气壁纸";
 const std::string appShortName = "SolarTermsWallpaper";
-const std::string version = "v0.2.0";
+const std::string version = "v0.2.1";
 
 namespace Utils {
     std::string getCombinedPath(std::string a, std::string b);

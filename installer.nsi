@@ -12,7 +12,7 @@
 ; 产品信息
 !define PRODUCT_NAME "二十四节气壁纸"
 !define PRODUCT_SHORT_NAME "SolarTermsWallpaper" ; 不要更改这一项
-!define PRODUCT_VERSION "v0.2.0"
+!define PRODUCT_VERSION "v0.2.1"
 !define PRODUCT_PUBLISHER "AIR-Kevin"
 !define PRODUCT_WEB_SITE "https://github.com/pbw-Kevin/${PRODUCT_SHORT_NAME}"
 
