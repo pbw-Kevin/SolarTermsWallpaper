@@ -22,6 +22,7 @@ AI declaration: using DeepSeek & GitHub Copilot in this project
 #include <tlhelp32.h>
 #include <direct.h>
 #include <shlwapi.h>
+#include <shlobj.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -35,6 +36,7 @@ AI declaration: using DeepSeek & GitHub Copilot in this project
 #pragma comment(lib, "shlwapi.lib")
 
 const std::string appName = "二十四节气壁纸";
+const std::string appShortName = "SolarTermsWallpaper";
 const std::string version = "v0.2.0";
 
 namespace Utils {
@@ -42,6 +44,7 @@ namespace Utils {
     std::string getExePath(char* argv0);
     bool hasOtherProcessWithSameName(char* argv0);
     bool atLeastWindows10();
+    std::string getMyAppData();
     size_t deleteFilesStartingWithProcessed(const std::string& folderPath);
     void msgBoxShowMessage(std::string message);
     void Exit(int code);
@@ -103,6 +106,15 @@ namespace Utils {
         }
 
         return false;
+    }
+
+    std::string getMyAppData() {
+        char path[MAX_PATH];
+        if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, path))) {
+            std::string appDataPath = path;
+            return getCombinedPath(appDataPath, appShortName);
+        }
+        return "";
     }
 
     size_t deleteFilesStartingWithProcessed(const std::string& folderPath) {
@@ -309,15 +321,16 @@ struct WallpaperConfig {
     bool isBold;
 };
 
-class Wallpaper{
+class Wallpaper {
     public:
-        Wallpaper(std::string cwd, Logger* logger);
+        Wallpaper(std::string cwd, std::string myAppData, Logger* logger);
         void setWallpaper(int idx, std::string parentCwd, std::string dateString, std::string rawDateString);
         void fallbackWallpaper();
         std::string wallpaperVersion;
     private:
         Logger* logger;
         std::string cwd;
+        std::string myAppData;
         WallpaperConfig conf[25];
         int activeIdx = -1;
         std::string getFallbackPath();
@@ -802,7 +815,7 @@ void Logger::log(int level, std::string content, Args... args) {
     fflush(fp);
 }
 
-Wallpaper::Wallpaper(std::string cwd, Logger* logger) : cwd(cwd), logger(logger) {
+Wallpaper::Wallpaper(std::string cwd, std::string myAppData, Logger* logger) : cwd(cwd), myAppData(myAppData), logger(logger) {
     logger->log(Logger::Info, "Initializing Wallpaper...");
     std::string confPath = Utils::getCombinedPath(cwd, "CONFIG");
     if (!PathFileExists(confPath.c_str())) {
@@ -826,7 +839,7 @@ Wallpaper::Wallpaper(std::string cwd, Logger* logger) : cwd(cwd), logger(logger)
 
 std::string Wallpaper::getFallbackPath() {
     char fallbackPath[MAX_PATH] = {};
-    std::string fallbackPathFilePath = Utils::getCombinedPath(cwd, "fallback_path.txt");
+    std::string fallbackPathFilePath = Utils::getCombinedPath(myAppData, "fallback_path.txt");
     FILE* fallbackPathFile = fopen(fallbackPathFilePath.c_str(), "r");
     if (fallbackPathFile) {
         fscanf(fallbackPathFile, "%259s", fallbackPath);
@@ -836,7 +849,7 @@ std::string Wallpaper::getFallbackPath() {
 }
 
 bool Wallpaper::setFallbackPath(std::string path) {
-    std::string fallbackPathFilePath = Utils::getCombinedPath(cwd, "fallback_path.txt");
+    std::string fallbackPathFilePath = Utils::getCombinedPath(myAppData, "fallback_path.txt");
     FILE* fallbackPathFile = fopen(fallbackPathFilePath.c_str(), "w");
     if (fallbackPathFile) {
         fprintf(fallbackPathFile, "%s", path.c_str());
@@ -867,7 +880,7 @@ bool Wallpaper::setSystemWallpaper(std::string path) {
 }
 
 void Wallpaper::setWallpaper(int idx, std::string parentCwd, std::string dateString, std::string rawDateString) {
-    std::string processedImagePath = Utils::getCombinedPath(cwd, "processed_" + rawDateString + ".png");
+    std::string processedImagePath = Utils::getCombinedPath(myAppData, "processed_" + rawDateString + ".png");
 
     // If the same wallpaper is already active
     if (activeIdx == idx) {
@@ -908,7 +921,7 @@ void Wallpaper::setWallpaper(int idx, std::string parentCwd, std::string dateStr
         }
     }
 
-    Utils::deleteFilesStartingWithProcessed(cwd);
+    Utils::deleteFilesStartingWithProcessed(myAppData);
 
     if (!ImageProcess::saveImage(img, processedImagePath)) {
         logger->log(Logger::Error, "Failed to save processed wallpaper image: %s", processedImagePath);
@@ -951,14 +964,23 @@ int main(int argc, char* argv[]) {
     }
 
     std::string cwd = Utils::getExePath(argv[0]);
-    logger = new Logger(fopen(Utils::getCombinedPath(cwd, "log.txt").c_str(), "w"),
+    if (cwd.empty()) {
+        MessageBoxA(NULL, "无法获取程序路径，程序即将退出。", "错误", MB_OK | MB_ICONERROR);
+        Utils::Exit(1);
+    }
+    std::string myAppData = Utils::getMyAppData();
+    if (myAppData.empty()) {
+        MessageBoxA(NULL, "无法获取应用数据路径，程序即将退出。", "错误", MB_OK | MB_ICONERROR);
+        Utils::Exit(1);
+    }
+    logger = new Logger(fopen(Utils::getCombinedPath(myAppData, "log.txt").c_str(), "w"),
 #ifdef SOLAR_TERMS_WALLPAPER_DEBUG
         Logger::Debug
 #else
         Logger::Error
 #endif
     );
-    wallpaper = new Wallpaper(Utils::getCombinedPath(cwd, "wallpapers"), logger);
+    wallpaper = new Wallpaper(Utils::getCombinedPath(cwd, "wallpapers"), myAppData, logger);
 
     HINSTANCE hInst = GetModuleHandleA(NULL);
 

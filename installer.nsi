@@ -11,10 +11,10 @@
 ;--------------------------------
 ; 产品信息
 !define PRODUCT_NAME "二十四节气壁纸"
-!define PRODUCT_SHORT_NAME "SolarTermsWallpaper"
+!define PRODUCT_SHORT_NAME "SolarTermsWallpaper" ; 不要更改这一项
 !define PRODUCT_VERSION "v0.2.0"
 !define PRODUCT_PUBLISHER "AIR-Kevin"
-!define PRODUCT_WEB_SITE "https://github.com/pbw-Kevin/SolarTermsWallpaper"
+!define PRODUCT_WEB_SITE "https://github.com/pbw-Kevin/${PRODUCT_SHORT_NAME}"
 
 ;--------------------------------
 ; 常规属性
@@ -78,7 +78,7 @@ FunctionEnd
 ;--------------------------------
 ; 检测进程是否运行（卸载版）
 Function un.IsAppRunning
-    nsExec::ExecToStack 'tasklist /NH /FI "IMAGENAME eq SolarTermsWallpaper.exe"'
+    nsExec::ExecToStack 'tasklist /NH /FI "IMAGENAME eq ${PRODUCT_SHORT_NAME}.exe"'
     Pop $0
     Pop $1
     Push $1
@@ -95,7 +95,7 @@ Function un.StrContainsSolarTerm
     Exch $0
     Push $1
     Push $2
-    StrCpy $1 "SolarTermsWallpaper.exe"
+    StrCpy $1 "${PRODUCT_SHORT_NAME}.exe"
     StrCpy $2 0
 loop:
     StrLen $3 $1
@@ -121,9 +121,11 @@ Section "Install"
     SetOverwrite ifnewer
     SetOutPath "$INSTDIR"
 
+    CreateDirectory "$APPDATA\${PRODUCT_SHORT_NAME}"
+
     WriteUninstaller "$INSTDIR\uninstall.exe"
 
-    File "build\Release\SolarTermsWallpaper.exe"
+    File "build\Release\${PRODUCT_SHORT_NAME}.exe"
     File "kill.bat"
 
     SetOutPath "$INSTDIR\wallpapers"
@@ -171,7 +173,7 @@ Section "Uninstall"
     ${If} $0 == 1
         MessageBox MB_YESNO|MB_ICONQUESTION "程序正在运行。$\r$\n是否关闭程序并继续卸载？" IDYES close_app IDNO abort_uninstall
         close_app:
-            nsExec::ExecToStack 'taskkill /IM SolarTermsWallpaper.exe /F'
+            nsExec::ExecToStack 'taskkill /IM ${PRODUCT_SHORT_NAME}.exe /F'
             Pop $1
             Sleep 1000
             Goto continue_uninstall
@@ -182,6 +184,7 @@ Section "Uninstall"
 
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCT_SHORT_NAME}"
     DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_SHORT_NAME}"
+    RMDir /r "$APPDATA\${PRODUCT_SHORT_NAME}"
     RMDir /r "$SMPROGRAMS\${PRODUCT_SHORT_NAME}"
     Delete "$DESKTOP\${PRODUCT_NAME}.lnk"
     RMDir /r "$INSTDIR"
