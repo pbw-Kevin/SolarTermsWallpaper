@@ -967,12 +967,29 @@ int main(int argc, char* argv[]) {
         MessageBoxA(NULL, "无法获取程序路径，程序即将退出。", "错误", MB_OK | MB_ICONERROR);
         Utils::Exit(1);
     }
+    if (!PathFileExistsA(cwd.c_str())) {
+        MessageBoxA(NULL, "程序路径不存在，程序即将退出。", "错误", MB_OK | MB_ICONERROR);
+        Utils::Exit(1);
+    }
     std::string myAppData = Utils::getMyAppData();
     if (myAppData.empty()) {
         MessageBoxA(NULL, "无法获取应用数据路径，程序即将退出。", "错误", MB_OK | MB_ICONERROR);
         Utils::Exit(1);
     }
-    logger = new Logger(fopen(Utils::getCombinedPath(myAppData, "log.txt").c_str(), "w"),
+    if (!PathFileExistsA(myAppData.c_str())) {
+        // Try to create the directory if it doesn't exist
+        if (!CreateDirectoryA(myAppData.c_str(), NULL)) {
+            MessageBoxA(NULL, "无法创建应用数据目录，程序即将退出。", "错误", MB_OK | MB_ICONERROR);
+            Utils::Exit(1);
+        }
+    }
+
+    FILE* logFp = fopen(Utils::getCombinedPath(myAppData, "log.txt").c_str(), "w");
+    if (!logFp) {
+        MessageBoxA(NULL, "无法创建日志文件，程序即将退出。", "错误", MB_OK | MB_ICONERROR);
+        Utils::Exit(1);
+    }
+    logger = new Logger(logFp,
 #ifdef SOLAR_TERMS_WALLPAPER_DEBUG
         Logger::Debug
 #else
