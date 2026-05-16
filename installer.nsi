@@ -14,7 +14,7 @@
 !define PRODUCT_SHORT_NAME "SolarTermsWallpaper" ; 不要更改这一项
 !define PRODUCT_VERSION "v0.2.1"
 !define PRODUCT_PUBLISHER "AIR-Kevin"
-!define PRODUCT_WEB_SITE "https://github.com/pbw-Kevin/${PRODUCT_SHORT_NAME}"
+!define PRODUCT_WEB_SITE "https://github.com/pbw-Kevin/SolarTermsWallpaper"
 
 ;--------------------------------
 ; 常规属性
@@ -72,7 +72,7 @@ FunctionEnd
 ; 函数：设置开机自启动
 Function SetAutoStart
     WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCT_SHORT_NAME}" '"$INSTDIR\${PRODUCT_SHORT_NAME}.exe"'
-    MessageBox MB_OK|MB_ICONINFORMATION "已添加开机自启动项。"
+    ; MessageBox MB_OK|MB_ICONINFORMATION "已添加开机自启动项。"
 FunctionEnd
 
 ;--------------------------------
