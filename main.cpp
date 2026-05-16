@@ -42,11 +42,12 @@ const std::string version = "v0.2.1";
 namespace Utils {
     std::string getCombinedPath(std::string a, std::string b);
     std::string getExePath(char* argv0);
+    bool startsWith(const std::string& str, const std::string& prefix);
     bool hasOtherProcessWithSameName(char* argv0);
     bool atLeastWindows10();
     std::string getMyAppData();
     size_t deleteFilesStartingWithProcessed(const std::string& folderPath);
-    void msgBoxShowMessage(std::string message);
+    void msgBoxShowMessage(std::string message, bool isError = false);
     void Exit(int code);
 
     std::string getCombinedPath(std::string a, std::string b) {
@@ -58,6 +59,10 @@ namespace Utils {
     std::string getExePath(char* argv0) {
         std::string exePath = argv0;
         return exePath.substr(0, exePath.find_last_of("\\"));
+    }
+
+    bool startsWith(const std::string& str, const std::string& prefix) {
+        return str.size() >= prefix.size() && str.compare(0, prefix.size(), prefix) == 0;
     }
 
     bool hasOtherProcessWithSameName(char* argv0) {
@@ -151,8 +156,9 @@ namespace Utils {
         return deletedCount;
     }
 
-    void msgBoxShowMessage(std::string message) {
-        MessageBoxA(NULL, message.c_str(), appName.c_str(), MB_OK | MB_ICONINFORMATION);
+    void msgBoxShowMessage(std::string message, bool isError) {
+        if (!isError) MessageBoxA(NULL, message.c_str(), appName.c_str(), MB_OK | MB_ICONINFORMATION);
+        else MessageBoxA(NULL, message.c_str(), (std::string("错误 - ") + appName).c_str(), MB_OK | MB_ICONERROR);
     }
 
     void Exit(int code) {
@@ -332,7 +338,7 @@ class Wallpaper {
         std::string cwd;
         std::string myAppData;
         WallpaperConfig conf[25];
-        int activeIdx = -1;
+        bool isActive = false;
         std::string getFallbackPath();
         bool setFallbackPath(std::string path);
         std::string getSystemWallpaper();
@@ -487,8 +493,8 @@ namespace TrayIcon {
 
     void ShowAboutDialog(HWND hwnd)
     {
-        std::string message = appName + "\n版本：" + version + "\n图片库版本：" + wallpaper->wallpaperVersion + "\n基于 MIT 协议在 GitHub 上开源：\nhttps://github.com/pbw-Kevin/SolarTermsWallpaper";
-        MessageBoxA(hwnd, message.c_str(), "关于", MB_OK | MB_ICONINFORMATION);
+        std::string message = "关于\n" + appName + "\n版本：" + version + "\n图片库版本：" + wallpaper->wallpaperVersion + "\n基于 MIT 协议在 GitHub 上开源：\nhttps://github.com/pbw-Kevin/SolarTermsWallpaper";
+        Utils::msgBoxShowMessage(message);
     }
 
     LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -497,7 +503,7 @@ namespace TrayIcon {
         {
         case WM_CREATE:
             if (!CreateTrayIcon(hwnd))
-                MessageBoxA(hwnd, "无法创建托盘图标", "错误", MB_OK | MB_ICONERROR);
+                Utils::msgBoxShowMessage("无法创建托盘图标", true);
             break;
         case WM_TRAYICON:
             if (lParam == WM_RBUTTONUP)
@@ -882,16 +888,22 @@ bool Wallpaper::setSystemWallpaper(std::string path) {
 void Wallpaper::setWallpaper(int idx, std::string parentCwd, std::string dateString, std::string rawDateString) {
     std::string processedImagePath = Utils::getCombinedPath(myAppData, "processed_" + rawDateString + ".png");
 
-    // If the same wallpaper is already active
-    if (activeIdx == idx) {
+    // If wallpaper is already active
+    if (isActive) {
         std::string currentWallpaper = getSystemWallpaper();
-        if (currentWallpaper.empty() || currentWallpaper != processedImagePath) {
-            logger->log(Logger::Warning, "Active wallpaper is missing or changed, resetting wallpaper.");
+        if (currentWallpaper.empty() || !Utils::startsWith(currentWallpaper, Utils::getCombinedPath(myAppData, "processed_"))) {
+            // This is not the wallpaper set by this application, respect user's choice
+            logger->log(Logger::Warning, "Active wallpaper is missing or changed, resetting fallback path.");
             setFallbackPath(currentWallpaper);
+            return;
+        } else if (currentWallpaper != processedImagePath) {
+            // This is the wallpaper set by this application but outdated, update it
+            logger->log(Logger::Warning, "Active wallpaper is outdated, updating wallpaper.");
         } else {
+            // This is the wallpaper set by this application and up-to-date, do nothing
             logger->log(Logger::Info, "Active wallpaper is already set, no action needed.");
+            return;
         }
-        return;
     }
 
     // Load exist wallpaper path for fallback
@@ -930,8 +942,8 @@ void Wallpaper::setWallpaper(int idx, std::string parentCwd, std::string dateStr
 
     if (setSystemWallpaper(processedImagePath)) return;
 
-    // Update idx
-    activeIdx = idx;
+    // Update isActive
+    isActive = true;
 
     // Save current wallpaper path for fallback
     setFallbackPath(fallbackPath.empty() ? "EMPTY_PATH" : fallbackPath);
@@ -946,7 +958,7 @@ void Wallpaper::fallbackWallpaper() {
     // Set fallback wallpaper
     if (setSystemWallpaper(fallbackPath == "EMPTY_PATH" ? "" : fallbackPath)) return;
 
-    activeIdx = -1;
+    isActive = false;
     setFallbackPath("");
 }
 
@@ -964,29 +976,29 @@ int main(int argc, char* argv[]) {
 
     std::string cwd = Utils::getExePath(argv[0]);
     if (cwd.empty()) {
-        MessageBoxA(NULL, "无法获取程序路径，程序即将退出。", "错误", MB_OK | MB_ICONERROR);
+        Utils::msgBoxShowMessage("无法获取程序路径，程序即将退出。", true);
         Utils::Exit(1);
     }
     if (!PathFileExistsA(cwd.c_str())) {
-        MessageBoxA(NULL, "程序路径不存在，程序即将退出。", "错误", MB_OK | MB_ICONERROR);
+        Utils::msgBoxShowMessage("程序路径不存在，程序即将退出。", true);
         Utils::Exit(1);
     }
     std::string myAppData = Utils::getMyAppData();
     if (myAppData.empty()) {
-        MessageBoxA(NULL, "无法获取应用数据路径，程序即将退出。", "错误", MB_OK | MB_ICONERROR);
+        Utils::msgBoxShowMessage("无法获取应用数据路径，程序即将退出。", true);
         Utils::Exit(1);
     }
     if (!PathFileExistsA(myAppData.c_str())) {
         // Try to create the directory if it doesn't exist
         if (!CreateDirectoryA(myAppData.c_str(), NULL)) {
-            MessageBoxA(NULL, "无法创建应用数据目录，程序即将退出。", "错误", MB_OK | MB_ICONERROR);
+            Utils::msgBoxShowMessage("无法创建应用数据目录，程序即将退出。", true);
             Utils::Exit(1);
         }
     }
 
     FILE* logFp = fopen(Utils::getCombinedPath(myAppData, "log.txt").c_str(), "w");
     if (!logFp) {
-        MessageBoxA(NULL, "无法创建日志文件，程序即将退出。", "错误", MB_OK | MB_ICONERROR);
+        Utils::msgBoxShowMessage("无法创建日志文件，程序即将退出。", true);
         Utils::Exit(1);
     }
     logger = new Logger(logFp,
@@ -1002,7 +1014,7 @@ int main(int argc, char* argv[]) {
 
     if (!TrayIcon::Start(hInst, cwd))
     {
-        MessageBoxA(NULL, "无法启动托盘功能", "错误", MB_OK | MB_ICONERROR);
+        Utils::msgBoxShowMessage("无法启动托盘功能", true);
         Utils::Exit(1);
     }
 
